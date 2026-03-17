@@ -51,6 +51,7 @@
 /* Entry points for IoMethodOps. */
 static size_t pgaio_uring_shmem_size(void);
 static void pgaio_uring_shmem_init(bool first_time);
+static void pgaio_uring_shmem_cleanup(void);
 static void pgaio_uring_init_backend(void);
 static int	pgaio_uring_submit(uint16 num_staged_ios, PgAioHandle **staged_ios);
 static void pgaio_uring_wait_one(PgAioHandle *ioh, uint64 ref_generation);
@@ -71,6 +72,7 @@ const IoMethodOps pgaio_uring_ops = {
 
 	.shmem_size = pgaio_uring_shmem_size,
 	.shmem_init = pgaio_uring_shmem_init,
+	.shmem_cleanup = pgaio_uring_shmem_cleanup,
 	.init_backend = pgaio_uring_init_backend,
 
 	.submit = pgaio_uring_submit,
@@ -392,6 +394,22 @@ pgaio_uring_shmem_init(bool first_time)
 		}
 
 		LWLockInitialize(&context->completion_lock, LWTRANCHE_AIO_URING_COMPLETION);
+	}
+}
+
+static void
+pgaio_uring_shmem_cleanup(void)
+{
+	if (pgaio_uring_contexts != NULL)
+	{
+		int			TotalProcs = pgaio_uring_procs();
+
+		elog(DEBUG1, "cleaning up %d io_uring processes", TotalProcs);
+
+		for (int i = 0; i < TotalProcs; i++)
+			io_uring_queue_exit(&pgaio_uring_contexts[i].io_uring_ring);
+
+		pgaio_uring_contexts = NULL;
 	}
 }
 

@@ -283,6 +283,12 @@ typedef struct IoMethodOps
 	void		(*shmem_init) (bool first_time);
 
 	/*
+	 * Clean up shared memory resources before shutdown. Called during shmem
+	 * exit. Optional.
+	 */
+	void		(*shmem_cleanup) (void);
+
+	/*
 	 * Per-backend initialization. Optional.
 	 */
 	void		(*init_backend) (void);

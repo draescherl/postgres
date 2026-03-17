@@ -145,6 +145,20 @@ AioShmemSize(void)
 	return sz;
 }
 
+/*
+ * Wrapper around pgaio_method_ops->shmem_cleanup to satisfy the
+ * on_shmem_exit() callback signature.
+ */
+static void
+pgaio_shmem_cleanup(int code, Datum arg)
+{
+	/*
+	 * No null check needed here; AioShmemInit only registers this callback
+	 * when shmem_cleanup is non-null.
+	 */
+	pgaio_method_ops->shmem_cleanup();
+}
+
 void
 AioShmemInit(void)
 {
@@ -212,6 +226,10 @@ out:
 	/* Initialize IO method specific resources. */
 	if (pgaio_method_ops->shmem_init)
 		pgaio_method_ops->shmem_init(!found);
+
+	/* Register callback to release any resources allocated above. */
+	if (pgaio_method_ops->shmem_cleanup)
+		on_shmem_exit(pgaio_shmem_cleanup, 0);
 }
 
 void
