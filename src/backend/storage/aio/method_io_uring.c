@@ -37,6 +37,7 @@
 #include "miscadmin.h"
 #include "storage/aio_internal.h"
 #include "storage/fd.h"
+#include "storage/ipc.h"
 #include "storage/proc.h"
 #include "storage/shmem.h"
 #include "storage/lwlock.h"
@@ -277,6 +278,26 @@ pgaio_uring_shmem_size(void)
 	return sz;
 }
 
+/*
+ * on_shmem_exit() callback that releases the io_uring queues in
+ * pgaio_uring_shmem_init.
+ */
+static void
+pgaio_uring_die(int code, Datum arg)
+{
+	if (pgaio_uring_contexts != NULL)
+	{
+		int			TotalProcs = pgaio_uring_procs();
+
+		elog(DEBUG1, "cleaning up %d io_uring processes", TotalProcs);
+
+		for (int i = 0; i < TotalProcs; i++)
+			io_uring_queue_exit(&pgaio_uring_contexts[i].io_uring_ring);
+
+		pgaio_uring_contexts = NULL;
+	}
+}
+
 static void
 pgaio_uring_shmem_init(bool first_time)
 {
@@ -393,6 +414,8 @@ pgaio_uring_shmem_init(bool first_time)
 
 		LWLockInitialize(&context->completion_lock, LWTRANCHE_AIO_URING_COMPLETION);
 	}
+
+	on_shmem_exit(pgaio_uring_die, 0);
 }
 
 static void
